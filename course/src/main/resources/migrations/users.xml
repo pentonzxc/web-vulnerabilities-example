@@ -1,0 +1,45 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+    <changeSet id="users-table"
+               author="nikolai.urusov@gmail.com"
+               logicalFilePath="users.xml"
+               dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="users"/>
+            </not>
+        </preConditions>
+        <sql>
+            CREATE TABLE users(
+                id UUID PRIMARY KEY,
+                login text NOT NULL,
+                password text NOT NULL
+            );
+        </sql>
+        <rollback>
+            DROP TABLE users;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="user-index-login"
+               author="nikolai.urusov@gmail.com"
+               logicalFilePath="users.xml"
+               dbms="postgresql">
+        <preConditions>
+            <not>
+                <indexExists indexName="idx_users_index_login"/>
+            </not>
+        </preConditions>
+        <sql>
+            CREATE INDEX idx_users_index_login ON users(login);
+        </sql>
+        <rollback>
+            DROP INDEX idx_users_index_login;
+        </rollback>
+    </changeSet>
+
+
+</databaseChangeLog>

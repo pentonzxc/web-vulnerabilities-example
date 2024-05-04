@@ -3,40 +3,65 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import db.ScalaSqlClient
 import org.postgresql.ds.PGSimpleDataSource
+import scalasql.core.DbClient
+import zio.{Scope, ZIO, ZIOAppArgs, ZIOAppDefault}
 
-import scala.concurrent.ExecutionContext
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Success
 
-object App {
-  def main(args: Array[String]): Unit = {
-    implicit val system: ActorSystem[_] = ActorSystem(Behaviors.empty, "app")
-    implicit val ec = system.executionContext
+object App extends ZIOAppDefault {
 
-    val pg = new PGSimpleDataSource()
+  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = {
+    implicit val actorSystem: ActorSystem[_] = ActorSystem(Behaviors.empty, "app")
+    implicit val actorEx = actorSystem.executionContext
 
-    pg.setURL("jdbc:postgresql://localhost:5432/postgres")
-    pg.setUser("postgres")
-    pg.setPassword("postgres")
+    val dependencies = for {
+      appConfig <- ZIO.fromTry(AppConfig.make())
 
-    val app = for {
-      dbSource <- ScalaSqlClient.postgresClient(pg)
-      binding <- initHttp()
-    } yield (binding, dbSource)
+      _ <- ZIO.fromFuture(implicit ex =>
+        LiquibaseMigrationRunner.run(appConfig.liquibaseConfig))
 
-    println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
-    scala.io.StdIn.readLine() // let it run until user presses return
+      _ <- ZIO.fromFuture { implicit ex =>
+        initPostgres(appConfig.postgresConfig)
+      }
 
-    // shutdown
-    (for {
-      (binding, _) <- app
-      _ <- binding.unbind()
-    } yield ()).onComplete(_ => system.terminate())
+      _ <- ZIO.acquireRelease(ZIO.fromFuture(_ => initHttpServer())) {
+        bind => ZIO.fromFuture(implicit ex => bind.unbind()).orDie
+      }
+
+    } yield ()
+
+    val onShutdownCloseActorSystem = ZIO.acquireRelease(ZIO.unit) { _ =>
+      zio.Console.printLine("Closing actor system").orDie *>
+        ZIO.succeed(actorSystem.terminate())
+    }
+
+
+    for {
+      _ <- dependencies
+      _ <- onShutdownCloseActorSystem
+      _ <- ZIO.never
+    } yield ()
   }
 
-  def initHttp()(implicit
+  def initPostgres(config: PostgresConfig)(implicit
+      ex: ExecutionContext): Future[DbClient.DataSource] = {
+    val pg = new PGSimpleDataSource()
+
+    pg.setUrl(config.url)
+    pg.setUser(config.user)
+    pg.setPassword(config.password)
+
+    PostgresClient.create(pg)
+  }
+
+  def initHttpServer()(implicit
       system: ActorSystem[_],
-      ex: ExecutionContext) = {
+      executionContext: ExecutionContext): Future[Http.ServerBinding] = {
+    val onShutdownCloseRequestTimeout = FiniteDuration(5, TimeUnit.SECONDS)
 
     val route = {
       path("hello") {
@@ -46,6 +71,10 @@ object App {
       }
     }
 
-    Http().newServerAt("localhost", 8080).bind(route).andThen()
+    Http().newServerAt("localhost", 8080).bind(route)
+      .map(_.addToCoordinatedShutdown(onShutdownCloseRequestTimeout))
+      .andThen {
+        case Success(value) => println(s"Server is started on ${value.localAddress.getPort}")
+      }
   }
 }

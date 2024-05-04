@@ -1,0 +1,27 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+    <changeSet id="posts-table"
+               author="nikolai.urusov@gmail.com"
+               logicalFilePath="posts.xml"
+               dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="posts"/>
+            </not>
+        </preConditions>
+        <sql>
+            CREATE TABLE posts(
+                id UUID PRIMARY KEY,
+                content TEXT,
+                user_id UUID,
+                CONSTRAINT posts_users_user_id_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE posts;
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
