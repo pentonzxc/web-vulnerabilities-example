@@ -3,7 +3,7 @@ scalaVersion := "2.13.12"
 lazy val course = project.in(file("."))
   .settings(
     name := "course",
-    libraryDependencies ++= akka
+    libraryDependencies ++= akka ++ scalasql ++ postgres
   )
 
 
@@ -15,6 +15,9 @@ lazy val akka = Seq(
   "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion
 )
 
+lazy val scalasql = Seq("com.lihaoyi" %% "scalasql" % "0.1.2")
+
+lazy val postgres = Seq("org.postgresql" % "postgresql" % "42.6.0")
 
 
 
