@@ -1,4 +1,6 @@
-import com.typesafe.config.{Config, ConfigFactory}
+package modules
+
+import com.typesafe.config.ConfigFactory
 
 import scala.util.Try
 

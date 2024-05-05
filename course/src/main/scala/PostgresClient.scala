@@ -1,19 +1,26 @@
+import doobie.Transactor
 import org.postgresql.ds.{PGSimpleDataSource => PgDataSource}
-import scalasql.core.DbClient.{DataSource => LibDataSource}
-import scalasql.dialects.PostgresDialect._
+import zio.interop.catz._
+import zio.{RIO, Scope, Task, ZIO}
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
 
 object PostgresClient {
-  def create(pgConfig: PgDataSource)(implicit
-      ex: ExecutionContext): Future[LibDataSource] = {
-    val client = new LibDataSource(pgConfig, config = new scalasql.Config {})
-    val connectionCheck = Future(pgConfig.getConnection()).map(_.close())
+  def create(pgDataSource: PgDataSource): RIO[Scope, Transactor[Task]] = {
+    val pool = Executors.newSingleThreadExecutor()
+    val ex = ExecutionContext.fromExecutorService(pool)
+    val transactor = Transactor.fromDataSource[Task](
+      pgDataSource,
+      ex
+    )
 
-    connectionCheck.map(_ => client)
-  } andThen {
-    case Success(_) => println(s"Postgres is started")
+    val checkConnection =
+      ZIO.acquireRelease(ZIO.attemptBlocking(pgDataSource.getConnection))(conn => ZIO.succeed(conn.close()))
+
+    (for {
+      _ <- ZIO.scoped(checkConnection)
+      _ <- zio.Console.printLine("Postgres is started")
+    } yield transactor).withFinalizer(_ => ZIO.attempt(ex.shutdown()).orDie)
   }
-
 }

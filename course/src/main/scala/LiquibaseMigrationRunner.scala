@@ -2,6 +2,7 @@ import liquibase.database.DatabaseFactory
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.ClassLoaderResourceAccessor
 import liquibase.{Contexts, LabelExpression, Liquibase}
+import modules.LiquibaseConfig
 
 import java.sql.DriverManager
 import scala.concurrent.{ExecutionContext, Future}

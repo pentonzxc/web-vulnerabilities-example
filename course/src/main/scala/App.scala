@@ -3,9 +3,11 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
+import doobie.Transactor
+import modules.{AppConfig, PostgresConfig, Repositories, Routers, Services}
 import org.postgresql.ds.PGSimpleDataSource
-import scalasql.core.DbClient
-import zio.{Scope, ZIO, ZIOAppArgs, ZIOAppDefault}
+import zio.{RIO, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
@@ -24,11 +26,13 @@ object App extends ZIOAppDefault {
       _ <- ZIO.fromFuture(implicit ex =>
         LiquibaseMigrationRunner.run(appConfig.liquibaseConfig))
 
-      _ <- ZIO.fromFuture { implicit ex =>
-        initPostgres(appConfig.postgresConfig)
-      }
+      pg <- initPostgres(appConfig.postgresConfig)
 
-      _ <- ZIO.acquireRelease(ZIO.fromFuture(_ => initHttpServer())) {
+      repositories = new Repositories(postgresTx = pg)
+      services = new Services(repositories)
+      routes = new Routers(services)
+
+      _ <- ZIO.acquireRelease(ZIO.fromFuture(_ => initHttpServer(route = routes.httpRoute))) {
         bind => ZIO.fromFuture(implicit ex => bind.unbind()).orDie
       }
 
@@ -47,8 +51,7 @@ object App extends ZIOAppDefault {
     } yield ()
   }
 
-  def initPostgres(config: PostgresConfig)(implicit
-      ex: ExecutionContext): Future[DbClient.DataSource] = {
+  def initPostgres(config: PostgresConfig): RIO[Scope, Transactor[Task]] = {
     val pg = new PGSimpleDataSource()
 
     pg.setUrl(config.url)
@@ -58,18 +61,10 @@ object App extends ZIOAppDefault {
     PostgresClient.create(pg)
   }
 
-  def initHttpServer()(implicit
+  def initHttpServer(route : Route)(implicit
       system: ActorSystem[_],
       executionContext: ExecutionContext): Future[Http.ServerBinding] = {
     val onShutdownCloseRequestTimeout = FiniteDuration(5, TimeUnit.SECONDS)
-
-    val route = {
-      path("hello") {
-        get {
-          complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-        }
-      }
-    }
 
     Http().newServerAt("localhost", 8080).bind(route)
       .map(_.addToCoordinatedShutdown(onShutdownCloseRequestTimeout))
