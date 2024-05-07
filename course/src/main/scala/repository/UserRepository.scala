@@ -18,20 +18,20 @@ trait UserRepository {
 
 class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository {
   override def findAuthUser(userId: UserId): Task[Option[User]] =
-    sql"SELECT id, login, password FROM user WHERE id = $userId"
+    sql"SELECT id, login, password FROM users WHERE id = $userId"
       .query[User]
       .option
       .transact(tx)
 
   override def createIfNotExists(user: User): Task[Unit] =
-    sql"INSERT INTO user(id, login , password) VALUES (${user.id} , ${user.login} , ${user.password})"
+    sql"INSERT INTO users (id, login , password) VALUES (${user.id} , ${user.login} , ${user.password})"
       .update
       .run
       .transact(tx)
       .unit
 
   override def findByLogin(login: String): Task[Option[User]] =
-    sql"SELECT id, login, password FROM user WHERE login = $login"
+    sql"SELECT id, login, password FROM users WHERE login = $login"
       .query[User]
       .option
       .transact(tx)

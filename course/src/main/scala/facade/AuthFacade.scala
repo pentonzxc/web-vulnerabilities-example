@@ -15,10 +15,7 @@ trait AuthFacade {
   def register(authUser: AuthUser): IO[AuthError, Unit]
 }
 
-
-
-
-class AuthFacadeImpl(userService : UserService, sessionService: SessionService) extends AuthFacade {
+class AuthFacadeImpl(userService : UserService, sessionService: SessionService) extends AuthFacade  {
 
   override def authenticateAndIssueSession(authUser: AuthUser): IO[AuthError, Session] = {
     for {
@@ -27,6 +24,7 @@ class AuthFacadeImpl(userService : UserService, sessionService: SessionService) 
     } yield session
   }
 
-  override def register(authUser: AuthUser): IO[AuthError, Unit] =
+  override def register(authUser: AuthUser): IO[AuthError, Unit] = {
     userService.register(authUser)
+  }
 }

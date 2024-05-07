@@ -10,7 +10,6 @@ import scala.concurrent.duration.FiniteDuration
 
 trait SessionService {
   def issueSession(userId: UserId, createdAt: Instant, ttl: FiniteDuration) : Task[Session]
-
   def findSession(sessionId : SessionId) : Task[Option[Session]]
 }
 

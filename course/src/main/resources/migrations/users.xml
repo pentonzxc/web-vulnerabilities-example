@@ -15,7 +15,7 @@
         <sql>
             CREATE TABLE users(
                 id UUID PRIMARY KEY,
-                login text NOT NULL,
+                login text NOT NULL UNIQUE,
                 password text NOT NULL
             );
         </sql>

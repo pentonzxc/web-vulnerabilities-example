@@ -12,7 +12,7 @@ import utils.ZIOFutures._
 
 class AuthRoute(authFacade: AuthFacade) extends Router {
 
-  private val register: Route =
+  private val register: Route = post {
     (path("register") & entity(as[AuthUser])) { authUser =>
       onSuccess(authFacade.register(authUser).either.unsafeToFuture) {
         case Right(_) => complete(StatusCodes.OK)
@@ -21,8 +21,9 @@ class AuthRoute(authFacade: AuthFacade) extends Router {
         case _ => complete(StatusCodes.InternalServerError)
       }
     }
+  }
 
-  private val login: Route =
+  private val login: Route = post {
     (path("login") & entity(as[AuthUser])) { authUser =>
       onSuccess(authFacade.authenticateAndIssueSession(authUser).either.unsafeToFuture) {
         case Right(session) =>
@@ -35,9 +36,16 @@ class AuthRoute(authFacade: AuthFacade) extends Router {
         case _ => complete(StatusCodes.InternalServerError)
       }
     }
-
-
-  override val route: Route = path("auth") {
-    concat(login, register)
   }
+
+  private val test =
+    (get & path("test"))(complete(StatusCodes.OK, "TEST"))
+
+
+  override val route: Route =
+    concat(
+      login,
+      register,
+      test
+    )
 }

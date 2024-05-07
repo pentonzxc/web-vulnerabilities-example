@@ -3,7 +3,7 @@ scalaVersion := "2.13.12"
 lazy val course = project.in(file("."))
   .settings(
     name := "course",
-    libraryDependencies ++= akka ++ doobie ++ postgres ++ liquibase ++ typesafeConfig ++ zio ++ circe ++ akkaHttpCirceSupport
+    libraryDependencies ++= akka ++ doobie ++ postgres ++ liquibase ++ typesafeConfig ++ zio ++ circe ++ akkaHttpCirceSupport ++ logging
   )
 
 val AkkaVersion = "2.8.5"
@@ -36,13 +36,17 @@ val circe = Seq(
   "io.circe" %% "circe-core",
   "io.circe" %% "circe-generic",
   "io.circe" %% "circe-generic-extras",
-  "io.circe" %% "circe-parser",
+  "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
-
 
 lazy val typesafeConfig = Seq("com.typesafe" % "config" % "1.4.3")
 
 val liquibase = Seq(
   "org.liquibase" % "liquibase-core" % "3.5.3"
 //  "com.mattbertolini" % "liquibase-slf4j" % "2.0.0"
+)
+
+val logging = Seq(
+  "ch.qos.logback" % "logback-classic" % "1.2.10",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4"
 )

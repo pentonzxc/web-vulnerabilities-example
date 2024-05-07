@@ -1,16 +1,15 @@
 package modules
 
 import akka.http.scaladsl.server.Route
-import facade.{AuthFacade, AuthFacadeImpl}
-import routes.AuthRoute
+import facade.AuthFacadeImpl
+import routes.{AkkaLogging, AuthRoute}
 
-class Routers(services : Services) {
+class Routers(services: Services) {
 
-  private val authFacade = new AuthFacadeImpl(services.userService , services.sessionService)
+  private val authFacade = new AuthFacadeImpl(services.userService, services.sessionService)
   private val authRoute = new AuthRoute(authFacade)
 
-
-
-
-  val httpRoute : Route = authRoute.route
+  val httpRoute: Route = AkkaLogging.logDirective {
+    authRoute.route
+  }
 }
