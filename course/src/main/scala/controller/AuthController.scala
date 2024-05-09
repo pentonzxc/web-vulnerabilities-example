@@ -1,4 +1,4 @@
-package routes
+package controller
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.HttpCookie
@@ -10,7 +10,7 @@ import facade.AuthFacade
 import model.error.AuthError
 import utils.ZIOFutures._
 
-class AuthRoute(authFacade: AuthFacade) extends Router {
+class AuthController(authFacade: AuthFacade) extends Controller {
 
   private val register: Route = post {
     (path("register") & entity(as[AuthUser])) { authUser =>
@@ -32,7 +32,7 @@ class AuthRoute(authFacade: AuthFacade) extends Router {
           }
 
         case Left(AuthError.InvalidPassword) => complete(StatusCodes.Unauthorized)
-        case Left(AuthError.NonExistUser) => complete(StatusCodes.BadRequest)
+        case Left(AuthError.InvalidUser) => complete(StatusCodes.BadRequest)
         case _ => complete(StatusCodes.InternalServerError)
       }
     }

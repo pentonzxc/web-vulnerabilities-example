@@ -3,7 +3,7 @@ package model
 import java.util.UUID
 
 trait Generator[A] {
-  def generate(): A
+  def next(): A
 }
 
 object Generator {
@@ -12,7 +12,7 @@ object Generator {
 
   def from[F, T](f: F => T)(implicit
       gen: Generator[F]): Generator[T] =
-    () => f(gen.generate)
+    () => f(gen.next)
 
   implicit val uuidGen: Generator[UUID] = () => UUID.randomUUID()
 }

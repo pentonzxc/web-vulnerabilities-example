@@ -1,4 +1,4 @@
-package routes
+package controller
 
 import akka.event.Logging.LogLevel
 import akka.event.{Logging, LoggingAdapter}
@@ -30,5 +30,4 @@ object AkkaLogging {
   }
 
   val logDirective: Directive0 = DebuggingDirectives.logRequestResult(LoggingMagnet(printResponseTime))
-
 }

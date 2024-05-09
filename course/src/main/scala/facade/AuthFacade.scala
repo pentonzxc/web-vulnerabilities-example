@@ -25,6 +25,6 @@ class AuthFacadeImpl(userService : UserService, sessionService: SessionService) 
   }
 
   override def register(authUser: AuthUser): IO[AuthError, Unit] = {
-    userService.register(authUser)
+    userService.create(authUser)
   }
 }

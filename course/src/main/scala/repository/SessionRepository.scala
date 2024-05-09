@@ -8,8 +8,8 @@ import scala.collection.concurrent.TrieMap
 
 trait SessionRepository {
   def find(sessionId: SessionId): Task[Option[Session]]
-
   def create(session: Session): Task[Unit]
+  def delete(sessionId: SessionId) : Task[Unit]
 }
 
 class InMemorySessionRepository extends SessionRepository {
@@ -20,4 +20,7 @@ class InMemorySessionRepository extends SessionRepository {
 
   override def create(session: Session): Task[Unit] =
     ZIO.attempt(sessions.put(session.id, session))
+
+  override def delete(sessionId: SessionId): Task[Unit] =
+    ZIO.attempt(sessions.remove(sessionId)).unit
 }
