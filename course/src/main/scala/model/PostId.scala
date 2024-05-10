@@ -9,7 +9,7 @@ case class PostId (value : UUID) extends AnyVal
 
 
 object PostId {
-  implicit val postIdJsonDecoder : Decoder[PostId] = deriveDecoder
-  implicit val postIdJsonEncoder: Encoder[PostId] = deriveEncoder
+  implicit val postIdJsonEncoder: Encoder[PostId] = Encoder[UUID].contramap(_.value)
+  implicit val postIdJsonDecoder : Decoder[PostId] = Decoder[UUID].map(PostId(_))
   implicit val postIdGen : Generator[PostId] = Generator.from[UUID, PostId](PostId(_))
 }

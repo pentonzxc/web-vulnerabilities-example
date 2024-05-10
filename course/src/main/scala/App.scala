@@ -5,7 +5,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import doobie.Transactor
-import modules.{AppConfig, PostgresConfig, Repositories, Routers, Services}
+import modules.{AppConfig, PostgresConfig, Repositories, Controllers, Services}
 import org.postgresql.ds.PGSimpleDataSource
 import zio.{RIO, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
 
@@ -30,7 +30,7 @@ object App extends ZIOAppDefault {
 
       repositories = new Repositories(postgresTx = pg)
       services = new Services(repositories)
-      routes = new Routers(services)
+      routes = new Controllers(services)
 
       _ <- ZIO.acquireRelease(ZIO.fromFuture(_ => initHttpServer(route = routes.httpRoute))) {
         bind => ZIO.fromFuture(implicit ex => bind.unbind()).orDie

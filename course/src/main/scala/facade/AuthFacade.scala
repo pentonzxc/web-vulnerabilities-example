@@ -11,6 +11,8 @@ import java.time.Instant
 import scala.concurrent.duration.DurationInt
 
 trait AuthFacade {
+
+  // TODO: don't create new session if session exists
   def authenticateAndIssueSession(authUser : AuthUser): IO[AuthError, Session]
   def register(authUser: AuthUser): IO[AuthError, Unit]
 }

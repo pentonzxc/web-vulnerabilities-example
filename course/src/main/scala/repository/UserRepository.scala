@@ -1,36 +1,47 @@
 package repository
 
+import cats.effect.Sync
+import doobie.Read
+import doobie.free.ConnectionIO
 import doobie.implicits._
-import doobie.postgres.implicits._
 import doobie.util.transactor.Transactor
-import doobie.{Meta, Read}
 import model.{Login, User, UserId}
 import zio.Task
 import zio.interop.catz._
 
-import java.util.UUID
-
 trait UserRepository {
-  def findAuthUser(userId: UserId): Task[Option[User]]
+  def find(userId: UserId): Task[Option[User]]
   def findByLogin(login: Login): Task[Option[User]]
   def createIfNotExists(user: User): Task[Unit]
 }
 
 class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with QueryImplicits {
-  override def findAuthUser(userId: UserId): Task[Option[User]] =
+  override def find(userId: UserId): Task[Option[User]] =
+    findQuery(userId).transact(tx)
+
+  private def findQuery(userId: UserId) =
     sql"SELECT id, login, password FROM users WHERE id = $userId"
       .query[User]
       .option
-      .transact(tx)
-
 
 //  TODO: implement right
-  override def createIfNotExists(user: User): Task[Unit] =
-    sql"INSERT INTO users (id, login , password) VALUES (${user.id} , ${user.login} , ${user.password})"
-      .update
-      .run
+  override def createIfNotExists(user: User): Task[Unit] = {
+    val createUser =
+      sql"INSERT INTO users (id, login , password) VALUES (${user.id} , ${user.login} , ${user.password})"
+        .update
+        .run
+
+    val transaction = for {
+      userOpt <- findQuery(user.id)
+      _ <- userOpt match {
+        case Some(_) => Sync[ConnectionIO].raiseError(new RuntimeException("User already exists"))
+        case None => createUser.map(_ => ())
+      }
+    } yield ()
+
+    transaction
       .transact(tx)
-      .unit
+  }
 
   override def findByLogin(login: Login): Task[Option[User]] =
     sql"SELECT id, login, password FROM users WHERE login = $login"

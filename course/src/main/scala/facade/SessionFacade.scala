@@ -7,6 +7,8 @@ import zio.{Task, ZIO}
 
 import java.time.Instant
 
+
+// FIXME: make this class to reuse methods
 trait SessionFacade {
   def checkSessionWithOwner(sessionId: SessionId, maybeSessionOwner: Login): Task[Either[AuthError, Unit]]
 
@@ -26,7 +28,7 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
         case Some(session) =>
           if (!ownerOpt.exists(_.id == session.iss))
             Left(AuthError.StolenSession)
-          else if (session.exp.isAfter(Instant.now()))
+          else if (session.exp.isBefore(Instant.now()))
             Left(AuthError.ExpiredSession)
           else
             Right(())
@@ -48,7 +50,7 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
       sessionOpt <- sessionService.findSession(sessionId)
       checkResult = sessionOpt match {
         case Some(session) =>
-          Either.cond(session.exp.isBefore(Instant.now()), () , AuthError.ExpiredSession)
+          Either.cond(session.exp.isAfter(Instant.now()), () , AuthError.ExpiredSession)
         case None =>
           Left(AuthError.InvalidSession)
       }
