@@ -60,7 +60,7 @@ class AuthFacadeImpl(sessionFacade: SessionFacade, userService: UserService) ext
 
     val session = sessionOpt match {
       case Some(session) => withFallback {
-          sessionFacade.checkSessionWithOwner(session, authUser.login)
+          sessionFacade.checkSession(session, authUser.login)
         }
       case None => authenticate(authUser)
     }

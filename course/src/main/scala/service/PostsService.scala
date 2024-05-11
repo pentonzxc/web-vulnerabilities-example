@@ -8,6 +8,7 @@ trait PostsService {
   def findPosts(userId : UserId) : Task[List[Post]]
   def findPostsByLogin(login : Login) : Task[List[Post]]
   def create(login : Login , content : String) : Task[Unit]
+  def delete(postId: PostId) : Task[Unit]
 }
 
 
@@ -35,4 +36,8 @@ class PostsServiceImpl(userService : UserService, postsRepository: PostsReposito
 
       posts <- postsRepository.findPosts(userId)
     } yield posts
+
+  override def delete(postId: PostId): Task[Unit] =
+    postsRepository.delete(postId)
+
 }

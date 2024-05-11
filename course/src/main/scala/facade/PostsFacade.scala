@@ -8,6 +8,7 @@ import zio.Task
 trait PostsFacade {
   def findByLogin(login : Login) : Task[List[Post]]
   def create(post : PostDto) : Task[Unit]
+  def delete(postId : PostId) : Task[Unit]
 }
 
 
@@ -17,5 +18,9 @@ class PostsFacadeImpl(postService : PostsService) extends PostsFacade {
 
   override def create(post: PostDto): Task[Unit] = {
     postService.create(post.login , content = post.content)
+  }
+
+  override def delete(postId: PostId): Task[Unit] = {
+    postService.delete(postId)
   }
 }

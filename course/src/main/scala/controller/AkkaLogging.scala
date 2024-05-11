@@ -19,6 +19,7 @@ object AkkaLogging {
         val loggingString = s"""Request: method - ${req.method.value}, url - ${req.uri}, response status - ${resp.status}, elapsed time - $elapsedTime ms"""
         LogEntry(loggingString, level)
       case Rejected(reason) =>
+
         LogEntry(s"Rejected Reason: ${reason.mkString(",")}", level)
     }
     entry.logTo(loggingAdapter)

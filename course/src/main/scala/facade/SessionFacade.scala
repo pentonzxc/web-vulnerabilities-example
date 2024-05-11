@@ -10,18 +10,17 @@ import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
 
 trait SessionFacade {
-  def checkSessionWithOwner(
+  def checkSession(
       sessionId: SessionId,
       maybeSessionOwner: Login,
       time: Instant = Instant.now()): Task[Either[AuthError, Session]]
-  def checkSession(sessionId: SessionId, time: Instant = Instant.now()): Task[Either[AuthError, Session]]
   def issueSession(userId: UserId, ttl: FiniteDuration) : Task[Session]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
 
 class SessionFacadeImpl(sessionService: SessionService, userService: UserService) extends SessionFacade {
 
-  override def checkSessionWithOwner(
+  override def checkSession(
       sessionId: SessionId,
       maybeSessionOwner: Login,
       time: Instant = Instant.now()): Task[Either[AuthError, Session]] = {
@@ -45,14 +44,6 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
 
   override def invalidateSession(sessionId: SessionId): Task[Unit] =
     sessionService.invalidateSession(sessionId)
-
-  override def checkSession(sessionId: SessionId, time: Instant = Instant.now()): Task[Either[AuthError, Session]] =
-    sessionService.findSession(sessionId).map { sessionOpt =>
-      for {
-        session <- sessionOpt.toRight(AuthError.InvalidSession)
-        _ <- checkExpired(session, time)
-      } yield session
-    }
 
   private def checkExpired(session: Session, now: Instant) =
     Either.cond(session.exp.isAfter(now), (), AuthError.ExpiredSession)
