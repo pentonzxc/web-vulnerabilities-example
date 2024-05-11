@@ -2,7 +2,7 @@ package service
 
 import dto.AuthUser
 import model.error.AuthError
-import model.{Login, User, UserId}
+import model.{Generator, Login, User, UserId}
 import repository.UserRepository
 import zio.Task
 
@@ -27,10 +27,10 @@ class UserServiceImpl(userRepository: UserRepository) extends UserService {
     }
 
   override def create(authUser: AuthUser): Task[Unit] =
-    userRepository.createIfNotExists(userFromAuthUser(authUser))
+    userRepository.createIfNotExists(newUser(authUser))
 
-  private def userFromAuthUser(authUser: AuthUser): User =
-    User(id = UserId(UUID.randomUUID()), login = authUser.login, password = authUser.password)
+  private def newUser(authUser: AuthUser): User =
+    User(id = Generator[UserId].next(), login = authUser.login, password = authUser.password)
 
   override def findUserByLogin(login: Login): Task[Option[User]] =
     userRepository.findByLogin(login)

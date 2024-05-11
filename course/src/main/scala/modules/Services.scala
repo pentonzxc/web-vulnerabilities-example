@@ -8,6 +8,6 @@ class Services(repositories: Repositories) {
   val sessionService: SessionService = new SessionServiceImpl(repositories.sessionRepository)
   val postsService : PostsService = new PostsServiceImpl(userService, repositories.postsRepository)
   val sessionFacade : SessionFacade = new SessionFacadeImpl(sessionService, userService)
-  val authFacade: AuthFacade = new AuthFacadeImpl(userService, sessionService)
+  val authFacade: AuthFacade = new AuthFacadeImpl(sessionFacade, userService)
   val postsFacade : PostsFacade = new PostsFacadeImpl(postsService)
 }

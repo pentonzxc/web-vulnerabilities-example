@@ -10,7 +10,6 @@ import facade.{AuthFacade, SessionFacade}
 import model.SessionId
 import model.error.AuthError
 import utils.ZIOFutures._
-import zio.ZIO
 
 class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade) extends Controller {
 
@@ -30,20 +29,9 @@ class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade) exten
   private val login: Route = post {
     (path("login") & entity(as[AuthUser])) { authUser =>
       sessionCookieOpt { sessionOpt =>
-        val authenticateAndCreateSession = ZIO.succeed(sessionOpt).flatMap {
-          case Some(session) =>
-            // reuse session
-            sessionFacade.checkSessionWithOwner(session, authUser.login).foldZIO(
-              failure = _ => authFacade.authenticate(authUser),
-              success = ZIO.attempt(_)
-            )
-
-          case None => authFacade.authenticate(authUser)
-        }.map(_.map(_.id))
-
-        onSuccess(authenticateAndCreateSession.unsafeToFuture) {
+        onSuccess(authFacade.useSessionOrFallbackToAuthentication(sessionOpt, authUser).unsafeToFuture) {
           case Right(session) =>
-            setCookie(HttpCookie("session", session.value)) {
+            setCookie(HttpCookie("session", session.id.value)) {
               complete(StatusCodes.OK)
             }
 

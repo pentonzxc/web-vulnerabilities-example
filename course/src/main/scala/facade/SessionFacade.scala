@@ -7,6 +7,7 @@ import service.{SessionService, UserService}
 import zio.{Task, ZIO}
 
 import java.time.Instant
+import scala.concurrent.duration.FiniteDuration
 
 trait SessionFacade {
   def checkSessionWithOwner(
@@ -14,6 +15,7 @@ trait SessionFacade {
       maybeSessionOwner: Login,
       time: Instant = Instant.now()): Task[Either[AuthError, Session]]
   def checkSession(sessionId: SessionId, time: Instant = Instant.now()): Task[Either[AuthError, Session]]
+  def issueSession(userId: UserId, ttl: FiniteDuration) : Task[Session]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
 
@@ -58,4 +60,6 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
   private def checkStolen(session: Session, maybeIss: UserId) =
     Either.cond(session.iss == maybeIss, (), AuthError.StolenSession)
 
+  override def issueSession(userId: UserId, ttl: FiniteDuration): Task[Session] =
+    sessionService.issueSession(userId, createdAt = Instant.now(), ttl = ttl)
 }

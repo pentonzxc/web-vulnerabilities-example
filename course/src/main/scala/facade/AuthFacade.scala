@@ -1,20 +1,26 @@
 package facade
 
 import dto.AuthUser
+import model.SessionId
 import model.auth.Session
 import model.error.{AuthError, UserAlreadyExist}
-import service.{SessionService, UserService}
+import service.UserService
 import zio.{Task, ZIO}
 
-import java.time.Instant
 import scala.concurrent.duration.DurationInt
 
 trait AuthFacade {
   def authenticate(authUser: AuthUser): Task[Either[AuthError, Session]]
+
   def register(authUser: AuthUser): Task[Either[AuthError, Unit]]
+
+  def useSessionOrFallbackToAuthentication(
+      sessionOpt: Option[SessionId],
+      authUser: AuthUser
+  ): Task[Either[AuthError, Session]]
 }
 
-class AuthFacadeImpl(userService: UserService, sessionService: SessionService) extends AuthFacade {
+class AuthFacadeImpl(sessionFacade: SessionFacade, userService: UserService) extends AuthFacade {
 
   override def authenticate(authUser: AuthUser): Task[Either[AuthError, Session]] =
     for {
@@ -22,7 +28,7 @@ class AuthFacadeImpl(userService: UserService, sessionService: SessionService) e
       res <- userIdOpt match {
         case Left(e) => ZIO.succeed(Left(e))
         case Right(userId) =>
-          sessionService.issueSession(userId, createdAt = Instant.now(), ttl = 10.minute).map(Right(_))
+          sessionFacade.issueSession(userId, ttl = 10.minute).map(Right(_))
       }
     } yield res
 
@@ -35,4 +41,31 @@ class AuthFacadeImpl(userService: UserService, sessionService: SessionService) e
         }
     res
   }
+
+  override def useSessionOrFallbackToAuthentication(
+      sessionOpt: Option[SessionId],
+      authUser: AuthUser): Task[Either[AuthError, Session]] = {
+    def withFallback(getSession: Task[Either[AuthError, Session]]): Task[Either[AuthError, Session]] =
+      getSession.foldZIO(
+        failure = _ => authenticate(authUser),
+        success = {
+          case Left(err) =>
+            zio.Console.printLine(s"Can't use source session, $err").orDie *>
+              authenticate(authUser)
+
+          case Right(session) =>
+            ZIO.succeed(session).asRight
+        }
+      )
+
+    val session = sessionOpt match {
+      case Some(session) => withFallback {
+          sessionFacade.checkSessionWithOwner(session, authUser.login)
+        }
+      case None => authenticate(authUser)
+    }
+
+    session
+  }
+
 }

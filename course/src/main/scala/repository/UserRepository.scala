@@ -16,12 +16,20 @@ trait UserRepository {
   def createIfNotExists(user: User): Task[Unit]
 }
 
+
+// TODO: add logging on transactor
 class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with QueryImplicits {
   override def find(userId: UserId): Task[Option[User]] =
     findQuery(userId).transact(tx)
 
   private def findQuery(userId: UserId) =
     sql"SELECT id, login, password FROM users WHERE id = $userId"
+      .query[User]
+      .option
+
+
+  private def findByLoginQuery(login : Login) =
+    sql"SELECT id, login, password FROM users WHERE login = $login"
       .query[User]
       .option
 
@@ -33,7 +41,7 @@ class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with Q
         .run
 
     val transaction = for {
-      userOpt <- findQuery(user.id)
+      userOpt <- findByLoginQuery(user.login)
       _ <- userOpt match {
         case Some(_) => Sync[ConnectionIO].raiseError(new UserAlreadyExist)
         case None => createUser.map(_ => ())
