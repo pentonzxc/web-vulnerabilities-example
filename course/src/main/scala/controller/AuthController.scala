@@ -6,15 +6,19 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
 import dto.AuthUser
-import facade.AuthFacade
+import facade.{AuthFacade, SessionFacade}
+import model.SessionId
 import model.error.AuthError
 import utils.ZIOFutures._
+import zio.ZIO
 
-class AuthController(authFacade: AuthFacade) extends Controller {
+class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade) extends Controller {
+
+  val sessionCookieOpt = optionalCookie("session").map(_.map(c => SessionId(c.value)))
 
   private val register: Route = post {
     (path("register") & entity(as[AuthUser])) { authUser =>
-      onSuccess(authFacade.register(authUser).either.unsafeToFuture) {
+      onSuccess(authFacade.register(authUser).unsafeToFuture) {
         case Right(_) => complete(StatusCodes.OK)
 
         case Left(AuthError.UserAlreadyExist) => complete(StatusCodes.Conflict)
@@ -25,27 +29,35 @@ class AuthController(authFacade: AuthFacade) extends Controller {
 
   private val login: Route = post {
     (path("login") & entity(as[AuthUser])) { authUser =>
-      onSuccess(authFacade.authenticateAndIssueSession(authUser).either.unsafeToFuture) {
-        case Right(session) =>
-          setCookie(HttpCookie("session", session.id.value)) {
-            complete(StatusCodes.OK)
-          }
+      sessionCookieOpt { sessionOpt =>
+        val authenticateAndCreateSession = ZIO.succeed(sessionOpt).flatMap {
+          case Some(session) =>
+            // reuse session
+            sessionFacade.checkSessionWithOwner(session, authUser.login).foldZIO(
+              failure = _ => authFacade.authenticate(authUser),
+              success = ZIO.attempt(_)
+            )
 
-        case Left(AuthError.InvalidPassword) => complete(StatusCodes.Unauthorized)
-        case Left(AuthError.InvalidUser) => complete(StatusCodes.BadRequest)
-        case _ => complete(StatusCodes.InternalServerError)
+          case None => authFacade.authenticate(authUser)
+        }.map(_.map(_.id))
+
+        onSuccess(authenticateAndCreateSession.unsafeToFuture) {
+          case Right(session) =>
+            setCookie(HttpCookie("session", session.value)) {
+              complete(StatusCodes.OK)
+            }
+
+          case Left(AuthError.InvalidPassword) => complete(StatusCodes.Unauthorized)
+          case Left(AuthError.InvalidUser) => complete(StatusCodes.BadRequest)
+          case _ => complete(StatusCodes.InternalServerError)
+        }
       }
     }
   }
 
-  private val test =
-    (get & path("test"))(complete(StatusCodes.OK, "TEST"))
-
-
   override val route: Route =
     concat(
       login,
-      register,
-      test
+      register
     )
 }

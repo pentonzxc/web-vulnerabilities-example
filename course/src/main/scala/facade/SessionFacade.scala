@@ -1,58 +1,61 @@
 package facade
 
-import model.error.AuthError
-import model.{Login, SessionId}
+import model.auth.Session
+import model.error.{AuthError, InvalidUserException}
+import model.{Login, SessionId, UserId}
 import service.{SessionService, UserService}
 import zio.{Task, ZIO}
 
 import java.time.Instant
 
-
-// FIXME: make this class to reuse methods
 trait SessionFacade {
-  def checkSessionWithOwner(sessionId: SessionId, maybeSessionOwner: Login): Task[Either[AuthError, Unit]]
-
-  def checkSession(sessionId: SessionId): Task[Either[AuthError, Unit]]
-
+  def checkSessionWithOwner(
+      sessionId: SessionId,
+      maybeSessionOwner: Login,
+      time: Instant = Instant.now()): Task[Either[AuthError, Session]]
+  def checkSession(sessionId: SessionId, time: Instant = Instant.now()): Task[Either[AuthError, Session]]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
 
 class SessionFacadeImpl(sessionService: SessionService, userService: UserService) extends SessionFacade {
 
-  override def checkSessionWithOwner(sessionId: SessionId, maybeSessionOwner: Login): Task[Either[AuthError, Unit]] =
+  override def checkSessionWithOwner(
+      sessionId: SessionId,
+      maybeSessionOwner: Login,
+      time: Instant = Instant.now()): Task[Either[AuthError, Session]] = {
+
     for {
       ownerOpt <- userService.findUserByLogin(maybeSessionOwner)
       sessionOpt <- sessionService.findSession(sessionId)
 
-      checkResult = sessionOpt match {
-        case Some(session) =>
-          if (!ownerOpt.exists(_.id == session.iss))
-            Left(AuthError.StolenSession)
-          else if (session.exp.isBefore(Instant.now()))
-            Left(AuthError.ExpiredSession)
-          else
-            Right(())
-        case None =>
-          Left(AuthError.InvalidSession)
-      }
+      result = for {
+        session <- sessionOpt.toRight(AuthError.InvalidSession)
+        _ <- checkExpired(session, time)
+        owner = ownerOpt.getOrElse(throw new InvalidUserException)
+        _ <- checkStolen(session, owner.id)
+      } yield session
 
-      _ <- ZIO.whenCase(checkResult) {
+      _ <- ZIO.whenCase(result) {
         case Left(AuthError.StolenSession) => invalidateSession(sessionId)
       }
-
-    } yield checkResult
+    } yield result
+  }
 
   override def invalidateSession(sessionId: SessionId): Task[Unit] =
     sessionService.invalidateSession(sessionId)
 
-  override def checkSession(sessionId: SessionId): Task[Either[AuthError, Unit]] =
-    for {
-      sessionOpt <- sessionService.findSession(sessionId)
-      checkResult = sessionOpt match {
-        case Some(session) =>
-          Either.cond(session.exp.isAfter(Instant.now()), () , AuthError.ExpiredSession)
-        case None =>
-          Left(AuthError.InvalidSession)
-      }
-    } yield checkResult
+  override def checkSession(sessionId: SessionId, time: Instant = Instant.now()): Task[Either[AuthError, Session]] =
+    sessionService.findSession(sessionId).map { sessionOpt =>
+      for {
+        session <- sessionOpt.toRight(AuthError.InvalidSession)
+        _ <- checkExpired(session, time)
+      } yield session
+    }
+
+  private def checkExpired(session: Session, now: Instant) =
+    Either.cond(session.exp.isAfter(now), (), AuthError.ExpiredSession)
+
+  private def checkStolen(session: Session, maybeIss: UserId) =
+    Either.cond(session.iss == maybeIss, (), AuthError.StolenSession)
+
 }

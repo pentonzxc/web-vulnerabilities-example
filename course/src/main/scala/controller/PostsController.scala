@@ -2,13 +2,13 @@ package controller
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
 import dto.post._
 import facade.{PostsFacade, SessionFacade}
 import io.circe.Encoder._
 import io.circe.syntax._
-import model.error.AuthError
+import model.error.{AuthError, InvalidUserException}
 import model.{Login, SessionId}
 import utils.ZIOFutures._
 
@@ -80,14 +80,22 @@ class PostsController(postsFacade: PostsFacade, sessionService: SessionFacade) e
     }
 
   override def route: Route =
-    concat(
-      getPosts,
-      createPost
-    )
+    handleInvalidUserException {
+      concat(
+        getPosts,
+        createPost
+      )
+    }
+
+  private def handleInvalidUserException =
+    handleExceptions {
+      ExceptionHandler {
+        case _: InvalidUserException => complete(StatusCodes.BadRequest, "invalid_user")
+      }
+    }
 
 //  {
 //    "login": "pavel"
-//    ,
 //    "password": "123"
 //  }
 }

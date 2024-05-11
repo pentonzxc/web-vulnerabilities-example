@@ -1,32 +1,38 @@
 package facade
 
 import dto.AuthUser
-import model.User
 import model.auth.Session
-import model.error.AuthError
+import model.error.{AuthError, UserAlreadyExist}
 import service.{SessionService, UserService}
-import zio.IO
+import zio.{Task, ZIO}
 
 import java.time.Instant
 import scala.concurrent.duration.DurationInt
 
 trait AuthFacade {
-
-  // TODO: don't create new session if session exists
-  def authenticateAndIssueSession(authUser : AuthUser): IO[AuthError, Session]
-  def register(authUser: AuthUser): IO[AuthError, Unit]
+  def authenticate(authUser: AuthUser): Task[Either[AuthError, Session]]
+  def register(authUser: AuthUser): Task[Either[AuthError, Unit]]
 }
 
-class AuthFacadeImpl(userService : UserService, sessionService: SessionService) extends AuthFacade  {
+class AuthFacadeImpl(userService: UserService, sessionService: SessionService) extends AuthFacade {
 
-  override def authenticateAndIssueSession(authUser: AuthUser): IO[AuthError, Session] = {
+  override def authenticate(authUser: AuthUser): Task[Either[AuthError, Session]] =
     for {
-      userId <- userService.authenticate(authUser.login , authUser.password)
-      session <- sessionService.issueSession(userId, createdAt = Instant.now() , ttl = 10.minute).orDie
-    } yield session
-  }
+      userIdOpt <- userService.authenticate(authUser.login, authUser.password)
+      res <- userIdOpt match {
+        case Left(e) => ZIO.succeed(Left(e))
+        case Right(userId) =>
+          sessionService.issueSession(userId, createdAt = Instant.now(), ttl = 10.minute).map(Right(_))
+      }
+    } yield res
 
-  override def register(authUser: AuthUser): IO[AuthError, Unit] = {
-    userService.create(authUser)
+  override def register(authUser: AuthUser): Task[Either[AuthError, Unit]] = {
+    val res: Task[Either[AuthError, Unit]] =
+      userService.create(authUser)
+        .asRight
+        .catchSome {
+          case _: UserAlreadyExist => ZIO.succeed(Left(AuthError.UserAlreadyExist))
+        }
+    res
   }
 }

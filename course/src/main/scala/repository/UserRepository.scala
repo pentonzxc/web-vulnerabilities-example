@@ -5,6 +5,7 @@ import doobie.Read
 import doobie.free.ConnectionIO
 import doobie.implicits._
 import doobie.util.transactor.Transactor
+import model.error.UserAlreadyExist
 import model.{Login, User, UserId}
 import zio.Task
 import zio.interop.catz._
@@ -34,7 +35,7 @@ class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with Q
     val transaction = for {
       userOpt <- findQuery(user.id)
       _ <- userOpt match {
-        case Some(_) => Sync[ConnectionIO].raiseError(new RuntimeException("User already exists"))
+        case Some(_) => Sync[ConnectionIO].raiseError(new UserAlreadyExist)
         case None => createUser.map(_ => ())
       }
     } yield ()
