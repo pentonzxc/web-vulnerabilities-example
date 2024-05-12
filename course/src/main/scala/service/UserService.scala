@@ -10,9 +10,7 @@ import java.util.UUID
 
 trait UserService {
   def authenticate(login: Login, password: String): Task[Either[AuthError, UserId]]
-
   def findUserByLogin(login: Login): Task[Option[User]]
-
   def create(authUser: AuthUser): Task[Unit]
 }
 

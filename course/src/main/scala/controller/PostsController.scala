@@ -60,16 +60,11 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) ex
       }
     }
 
-
   private val deletePosts =
-    path("posts" / LoginMatcher /  PostIdMatcher) { (login , postId) =>
+    path("posts" / PostIdMatcher) { postId =>
       delete {
-        withSessionCookie { session =>
-          checkSessionDirective(session , login) {
-            onSuccess(postsFacade.delete(postId).unsafeToFuture) {
-              complete(StatusCodes.OK)
-            }
-          }
+        onSuccess(postsFacade.delete(postId).unsafeToFuture) {
+          complete(StatusCodes.OK)
         }
       }
     }
@@ -78,7 +73,8 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) ex
     handleInvalidUserException {
       concat(
         getPosts,
-        createPost
+        createPost,
+        deletePosts
       )
     }
 
