@@ -9,15 +9,15 @@ import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
 
 trait SessionService {
-  def issueSession(secretToken: SecretToken, userId: UserId, createdAt: Instant, ttl: FiniteDuration): Task[Session]
+  def issueSession(userId: UserId, secretToken: SecretToken, createdAt: Instant, ttl: FiniteDuration): Task[Session]
   def findSession(sessionId: SessionId): Task[Option[Session]]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
 
 class SessionServiceImpl(sessionRepository: SessionRepository) extends SessionService {
   override def issueSession(
-      secretToken: SecretToken,
       userId: UserId,
+      secretToken: SecretToken,
       createdAt: Instant,
       ttl: FiniteDuration): Task[Session] = {
     val expireAt = createdAt.plusNanos(ttl.toNanos)

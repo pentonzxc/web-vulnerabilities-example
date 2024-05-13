@@ -25,6 +25,7 @@ object AkkaLogging {
     entry.logTo(loggingAdapter)
   }
 
+
   private def printResponseTime(log: LoggingAdapter) = {
     val requestTimestamp = System.nanoTime
     akkaResponseTimeLoggingFunction(log, requestTimestamp) _

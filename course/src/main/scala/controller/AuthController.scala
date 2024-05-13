@@ -1,28 +1,26 @@
 package controller
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.HttpCookie
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import com.typesafe.scalalogging.StrictLogging
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
 import dto.AuthUser
 import facade.{AuthFacade, SessionFacade}
-import model.error.{AuthError, SessionError}
+import model.error.AuthError
 import model.{SecretToken, SessionId}
 import utils.ZIOFutures._
+import zio.ZIO
 
-import java.security.SecureRandom
-
-class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade, authDirectives: AuthDirectives) extends Controller {
-
-  val sessionCookieOpt = optionalCookie("session").map(_.map(c => SessionId(c.value)))
+class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade)
+  extends Controller with StrictLogging {
 
   private val register: Route = post {
     (path("register") & entity(as[AuthUser])) { authUser =>
       onSuccess(authFacade.register(authUser).unsafeToFuture) {
         case Right(_) => complete(StatusCodes.OK)
 
-        case Left(AuthError.UserAlreadyExist) => complete(StatusCodes.Conflict)
+        case Left(err: AuthError.UserAlreadyExist.type) => complete(StatusCodes.Conflict, err.message)
         case _ => complete(StatusCodes.InternalServerError)
       }
     }
@@ -30,22 +28,8 @@ class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade, authD
 
   private val login: Route = post {
     (path("login") & entity(as[AuthUser])) { authUser =>
-      sessionCookieOpt { sessionOpt =>
-        onSuccess(authFacade.useSessionOrFallbackToAuthentication(
-          sessionOpt,
-          authUser,
-          secretToken = Security.generateCsrfToken()).unsafeToFuture) {
-          case Right(session) =>
-            respondWithHeader(`X-CSRF-TOKEN`(session.secretToken)) {
-              setCookie(HttpCookie("session", session.id.value)) {
-                complete(StatusCodes.OK)
-              }
-            }
-          case Left(err : SessionError) => complete(err.message)
-          case Left(AuthError.InvalidPassword) => complete(StatusCodes.Forbidden)
-          case Left(AuthError.InvalidUser) => complete(StatusCodes.BadRequest)
-          case _ => complete(StatusCodes.InternalServerError)
-        }
+      (sessionCookieOpt & optionalHeaderValueByType[`X-CSRF-TOKEN`]()) { case (sessionOpt, csrfOpt) =>
+        loginRoute(authUser, sessionOpt, secretToken = csrfOpt.map(_.token))
       }
     }
   }
@@ -56,21 +40,37 @@ class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade, authD
       register
     )
 
-  private object Security {
+  private def loginRoute(
+      authUser: AuthUser,
+      sessionId: Option[SessionId],
+      secretToken: Option[SecretToken]
+  ): Route = {
+    val authenticator = sessionId.zip(secretToken) match {
+      case Some((sessionId, secretToken)) =>
+        sessionFacade.checkSession(sessionId, secretToken, authUser.login).flatMap {
+          case Left(_) =>
+            logger.debug("Can't use session for logging")
+            authFacade.authenticate(authUser, generateCsrfToken())
 
-    private val threadLocalRandom: ThreadLocal[SecureRandom] = ThreadLocal.withInitial(() => new SecureRandom())
-    def generateCsrfToken(): SecretToken = {
-      val random = threadLocalRandom.get()
-      val buffer = new StringBuilder
-      val length = Alphanumeric.length
-
-      (0 until 32).foreach { _ =>
-        buffer += Alphanumeric.charAt(random.nextInt(length)).toString
-      }
-
-      SecretToken(buffer.toString())
+          case Right(session) =>
+            ZIO.attempt(Right(session))
+        }
+      case None =>
+        logger.debug("Can't use session for logging")
+        authFacade.authenticate(authUser, generateCsrfToken())
     }
 
-    private val Alphanumeric: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    onSuccess(authenticator.unsafeToFuture) {
+      case Right(session) =>
+        (respondWithHeader(`X-CSRF-TOKEN`(session.secretToken)) & setCookie(sessionCookie(
+          session.id,
+          exp = session.exp))) {
+          complete(StatusCodes.OK)
+        }
+      case Left(err) =>
+        removeSessionCookie {
+          complete(StatusCodes.Forbidden, err.message)
+        }
+    }
   }
 }

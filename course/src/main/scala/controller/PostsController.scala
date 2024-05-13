@@ -11,11 +11,12 @@ import dto.post._
 import facade.{PostsFacade, SessionFacade}
 import io.circe.Encoder._
 import io.circe.syntax._
-import model.error.{AuthError, InvalidUserException}
-import model.{Login, PostId, SecretToken, SessionId}
+import model.error.InvalidUserException
+import model.{Login, PostId, SessionId}
 import utils.ZIOFutures._
 
-class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) extends Controller {
+class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, authDirectives: AuthDirectives)
+  extends Controller {
 
   private val withSessionCookie: Directive1[SessionId] = optionalCookie("session")
     .flatMap {
@@ -24,7 +25,6 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) ex
     }
   private val LoginMatcher = Segment.map(Login(_))
   private val PostIdMatcher = JavaUUID.map(PostId(_))
-  private val LoginParameter = parameter("login").map(Login(_))
 
   private val NoCacheHeader = `Cache-Control`(`no-cache`, `must-revalidate`, `no-store`, `max-age`(0))
   private val ContentTypeSecurityPolicyHeader =
@@ -35,14 +35,16 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) ex
     }
 
   private val createPost =
-    (path("posts") & LoginParameter) { login =>
+    path("posts" / LoginMatcher) { login =>
       post {
         (withSessionCookie & headerValueByType[`X-CSRF-TOKEN`]()) { case (session, csrfToken) =>
-          checkSessionDirective(session, login, csrfToken.token) {
+          authDirectives.checkSessionDirective(session, csrfToken.token, login, invalidateSessionCookie = true) {
             entity(as[CreatePostRequest]) { createPostRequest =>
               val postDto = PostDto(content = createPostRequest.content, login = login)
               onSuccess(postsFacade.create(postDto).unsafeToFuture) {
-                complete(StatusCodes.Created)
+                respondWithHeader(csrfToken) {
+                  complete(StatusCodes.Created)
+                }
               }
             }
           }
@@ -71,12 +73,14 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade) ex
     }
 
   private val deletePost =
-    (path("posts" / PostIdMatcher) & LoginParameter) { case (postId, login) =>
+    path("posts" / LoginMatcher / PostIdMatcher) { case (login , postId) =>
       delete {
         (withSessionCookie & headerValueByType[`X-CSRF-TOKEN`]()) { case (sessionCookie, csrfToken) =>
-          checkSessionDirective(sessionCookie, login, csrfToken.token) {
+          authDirectives.checkSessionDirective(sessionCookie, csrfToken.token, login, invalidateSessionCookie = true) {
             onSuccess(postsFacade.delete(postId).unsafeToFuture) {
-              complete(StatusCodes.NoContent)
+              respondWithHeader(csrfToken) {
+                complete(StatusCodes.NoContent)
+              }
             }
           }
         }

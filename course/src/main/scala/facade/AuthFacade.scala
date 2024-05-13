@@ -13,16 +13,9 @@ trait AuthFacade {
   def authenticate(authUser: AuthUser, secretToken: SecretToken): Task[Either[AuthError, Session]]
 
   def register(authUser: AuthUser): Task[Either[AuthError, Unit]]
-
-  def useSessionOrFallbackToAuthentication(
-      sessionOpt: Option[SessionId],
-      authUser: AuthUser,
-      secretToken : SecretToken
-  ): Task[Either[AuthError, Session]]
 }
 
 class AuthFacadeImpl(sessionFacade: SessionFacade, userService: UserService) extends AuthFacade {
-
   override def authenticate(authUser: AuthUser, secretToken: SecretToken): Task[Either[AuthError, Session]] =
     for {
       userIdOpt <- userService.authenticate(authUser.login, authUser.password)
@@ -42,32 +35,4 @@ class AuthFacadeImpl(sessionFacade: SessionFacade, userService: UserService) ext
         }
     res
   }
-
-  override def useSessionOrFallbackToAuthentication(
-      sessionOpt: Option[SessionId],
-      authUser: AuthUser,
-      secretToken: SecretToken): Task[Either[AuthError, Session]] = {
-    def withFallback(getSession: Task[Either[AuthError, Session]]): Task[Either[AuthError, Session]] =
-      getSession.foldZIO(
-        failure = _ => authenticate(authUser, secretToken),
-        success = {
-          case Left(err) =>
-            zio.Console.printLine(s"Can't use source session, $err").orDie *>
-              authenticate(authUser, secretToken)
-
-          case Right(session) =>
-            ZIO.succeed(session).asRight
-        }
-      )
-
-    val session = sessionOpt match {
-      case Some(session) => withFallback {
-          sessionFacade.checkSession(session, authUser.login, secretToken)
-        }
-      case None => authenticate(authUser, secretToken)
-    }
-
-    session
-  }
-
 }
