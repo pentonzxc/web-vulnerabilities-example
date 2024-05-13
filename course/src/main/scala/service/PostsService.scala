@@ -1,5 +1,6 @@
 package service
 
+import model.error.InvalidUserException
 import model.{Generator, Login, Post, PostId, UserId}
 import repository.PostsRepository
 import zio.Task
@@ -21,7 +22,7 @@ class PostsServiceImpl(userService : UserService, postsRepository: PostsReposito
     for {
       userOpt <- userService.findUserByLogin(login)
 
-      userId = userOpt.map(_.id).getOrElse(throw new RuntimeException("user non exist"))
+      userId = userOpt.map(_.id).getOrElse(throw new InvalidUserException)
       newPost = Post(Generator[PostId].next(),  content = content , userId = userId)
 
       _ <- postsRepository.create(newPost)
@@ -32,7 +33,7 @@ class PostsServiceImpl(userService : UserService, postsRepository: PostsReposito
     for {
       userOpt <- userService.findUserByLogin(login)
 
-      userId = userOpt.map(_.id).getOrElse(throw new RuntimeException("user non exist"))
+      userId = userOpt.map(_.id).getOrElse(throw new InvalidUserException)
 
       posts <- postsRepository.findPosts(userId)
     } yield posts

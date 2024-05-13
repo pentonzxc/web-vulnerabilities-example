@@ -2,7 +2,7 @@ package facade
 
 import model.auth.Session
 import model.error.{AuthError, InvalidUserException}
-import model.{Login, SessionId, UserId}
+import model.{Login, SecretToken, SessionId, UserId}
 import service.{SessionService, UserService}
 import zio.{Task, ZIO}
 
@@ -13,8 +13,9 @@ trait SessionFacade {
   def checkSession(
       sessionId: SessionId,
       maybeSessionOwner: Login,
+      secretToken: SecretToken,
       time: Instant = Instant.now()): Task[Either[AuthError, Session]]
-  def issueSession(userId: UserId, ttl: FiniteDuration) : Task[Session]
+  def issueSession(secretToken : SecretToken, userId: UserId, ttl: FiniteDuration) : Task[Session]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
 
@@ -23,8 +24,8 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
   override def checkSession(
       sessionId: SessionId,
       maybeSessionOwner: Login,
+      secretToken: SecretToken,
       time: Instant = Instant.now()): Task[Either[AuthError, Session]] = {
-
     for {
       ownerOpt <- userService.findUserByLogin(maybeSessionOwner)
       sessionOpt <- sessionService.findSession(sessionId)
@@ -34,6 +35,7 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
         _ <- checkExpired(session, time)
         owner = ownerOpt.getOrElse(throw new InvalidUserException)
         _ <- checkStolen(session, owner.id)
+        _ <- checkSecret(session, secretToken)
       } yield session
 
       _ <- ZIO.whenCase(result) {
@@ -51,6 +53,10 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
   private def checkStolen(session: Session, maybeIss: UserId) =
     Either.cond(session.iss == maybeIss, (), AuthError.StolenSession)
 
-  override def issueSession(userId: UserId, ttl: FiniteDuration): Task[Session] =
+
+  private def checkSecret(session : Session, secret : SecretToken) =
+    Either.cond(session.secretToken == secret, (), AuthError.InvalidCsrf)
+
+  override def issueSession(secretToken : SecretToken, userId: UserId, ttl: FiniteDuration): Task[Session] =
     sessionService.issueSession(userId, createdAt = Instant.now(), ttl = ttl)
 }

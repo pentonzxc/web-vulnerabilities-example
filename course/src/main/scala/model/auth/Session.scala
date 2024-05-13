@@ -1,7 +1,13 @@
 package model.auth
 
-import model.{SessionId, UserId}
+import model.{SecretToken, SessionId, UserId}
 
 import java.time.Instant
 
-case class Session(id: SessionId, iss: UserId, created: Instant, exp: Instant)
+case class Session(
+    id: SessionId,
+    secretToken: SecretToken,
+    iss: UserId,
+    created: Instant,
+    exp: Instant
+)

@@ -29,7 +29,7 @@ class PostgresPostsRepository(tx: Transactor[Task]) extends PostsRepository with
   }
 
   override def delete(postId: PostId): Task[Unit] =
-    sql"DELETE FROM posts WHERE postId = $postId"
+    sql"DELETE FROM posts WHERE id = $postId"
       .update
       .run
       .transact(tx)

@@ -9,6 +9,10 @@
     <div id="postsContainer"></div>
 
     <script nonce="rAnd0m">
+      let url = window.location.href;
+      let segments = url.split("/");
+      let login = segments[segments.length - 1];
+
       function fetchPosts(currentUrl) {
         console.log("Request posts");
         fetch(currentUrl, {
@@ -21,7 +25,7 @@
             if (response.status != "200") {
               response.text().then((errorCode) => {
                 const container = document.getElementById("postsContainer");
-                container.innerHTML = `Something went wrong: ${errorCode}`;
+                container.innerHTML = `Error response: ${errorCode}`;
               });
 
               throw new Error("Can't request posts");
@@ -29,24 +33,50 @@
             return response.json();
           })
           .then((data) => {
-            const container = document.getElementById("postsContainer");
-
             data.forEach((post) => {
-              const postElement = document.createElement("div");
-              postElement.innerHTML = `
-                <h3>${post.content}</h3>
-                <p>Posted by: ${post.userId}</p>
-                <hr>`;
-
-              console.log(post);
-
-              container.appendChild(postElement);
+              createPost(post);
             });
           });
       }
 
-      // TODO: somehow fix that
-      fetchPosts("http://localhost:8080/posts/pavel");
+      function deletePost(postId) {
+        // Send a DELETE request to the server to delete the post with the specified postId
+        fetch(`/posts/${postId}?login=${login}`, {
+          method: "DELETE",
+        })
+          .then((response) => {
+            if (response.status <= 400) {
+              // If the post is successfully deleted, remove the post element from the DOM
+              const postElement = document.getElementById(postId);
+              if (postElement) {
+                postElement.remove();
+              }
+            } else {
+              console.error("Failed to delete post");
+            }
+          })
+          .catch((error) => {
+            console.error("Error deleting post:", error);
+          });
+      }
+
+      function createPost(post) {
+        const container = document.getElementById("postsContainer");
+
+        const postElement = document.createElement("div");
+        postElement.id = `${post.id}`;
+        postElement.innerHTML = `
+            <h3>${post.content}</h3>
+            <h4>${post.id}</h4>
+            <p>Posted by: ${post.userId}</p>
+            <button nonce="rAnd0m" onclick="deletePost('${post.id}')">Delete</button>
+            <hr>`;
+        console.log(post);
+
+        container.appendChild(postElement);
+      }
+
+      fetchPosts(url);
     </script>
   </body>
 </html>
