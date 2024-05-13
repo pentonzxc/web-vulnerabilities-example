@@ -7,7 +7,6 @@ class Controllers(services: Services) {
 
   private val authDirectives = new AuthDirectives(services.sessionFacade)
 
-
   private val authController = new AuthController(services.authFacade, services.sessionFacade)
   private val postsController = new PostsController(services.postsFacade, services.sessionFacade, authDirectives)
 

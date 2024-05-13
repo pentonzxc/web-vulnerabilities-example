@@ -6,12 +6,29 @@
     <link rel="shortcut icon" href="#" />
   </head>
   <body>
+    <div>
+      <h2>Login</h2>
+      <form id="loginForm">
+        <label for="login">Login:</label>
+        <input type="text" id="login" name="login" required /><br /><br />
+        <label for="password">Password:</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          required
+        /><br /><br />
+        <button type="submit">Login</button>
+      </form>
+    </div>
+
     <div id="postsContainer"></div>
 
     <script nonce="rAnd0m">
       let url = window.location.href;
       let segments = url.split("/");
       let login = segments[segments.length - 1];
+      let loginForm = document.getElementById("loginForm");
 
       function fetchPosts(currentUrl) {
         console.log("Request posts");
@@ -22,6 +39,7 @@
           },
         })
           .then((response) => {
+            response.headers.get("X-CSRF-TOKEN");
             if (response.status != "200") {
               response.text().then((errorCode) => {
                 const container = document.getElementById("postsContainer");
@@ -34,15 +52,18 @@
           })
           .then((data) => {
             data.forEach((post) => {
-              createPost(post);
+              renderPost(post);
             });
           });
       }
 
       function deletePost(postId) {
         // Send a DELETE request to the server to delete the post with the specified postId
-        fetch(`/posts/${postId}?login=${login}`, {
+        fetch(`/posts/${login}/${postId}`, {
           method: "DELETE",
+          headers: {
+            "X-CSRF-TOKEN": localStorage.getItem("X-CSRF-TOKEN"),
+          },
         })
           .then((response) => {
             if (response.status <= 400) {
@@ -60,7 +81,7 @@
           });
       }
 
-      function createPost(post) {
+      function renderPost(post) {
         const container = document.getElementById("postsContainer");
 
         const postElement = document.createElement("div");
@@ -75,6 +96,42 @@
 
         container.appendChild(postElement);
       }
+
+      function doLogin(credentials) {
+        fetch("/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(credentials),
+        })
+          .then((response) => {
+            const csrfToken = response.headers.get("X-CSRF-TOKEN");
+            if (csrfToken) {
+              localStorage.setItem("X-CSRF-TOKEN", csrfToken);
+            } else {
+              console.error("CSRF token not found in response headers");
+            }
+
+            if (!response.ok) {
+              throw new Error("Login failed");
+            }
+          })
+          .catch((error) => console.error("Login error:", error));
+      }
+
+      loginForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const formData = new FormData(document.getElementById("loginForm"));
+        const data = {};
+        formData.forEach((value, key) => {
+          console.log(`value:${value}`);
+          console.log(`key:${key}`);
+          data[key] = value;
+        });
+        console.log(data);
+        doLogin(data);
+      });
 
       fetchPosts(url);
     </script>

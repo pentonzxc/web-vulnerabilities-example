@@ -1,3 +1,4 @@
+import com.typesafe.scalalogging.StrictLogging
 import liquibase.database.DatabaseFactory
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.ClassLoaderResourceAccessor
@@ -8,7 +9,7 @@ import java.sql.DriverManager
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Success
 
-object LiquibaseMigrationRunner {
+object LiquibaseMigrationRunner extends StrictLogging{
   def run(config: LiquibaseConfig)(implicit
       ec: ExecutionContext): Future[Unit] = {
     Future(
@@ -22,6 +23,6 @@ object LiquibaseMigrationRunner {
       conn.close()
     }
   } andThen {
-    case Success(_) => println("Migrations is succeed")
+    case Success(_) => logger.info("Migrations is succeed")
   }
 }

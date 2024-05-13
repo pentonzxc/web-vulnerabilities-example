@@ -8,6 +8,5 @@ object post {
   case class PostDto(content : String, login : Login)
   case class CreatePostRequest(content : String) extends AnyVal
 
-
   implicit val createPostRequestJsonDecoder : Decoder[CreatePostRequest] = deriveDecoder
 }

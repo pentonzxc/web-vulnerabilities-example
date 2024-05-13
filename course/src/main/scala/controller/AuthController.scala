@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.StrictLogging
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
 import dto.AuthUser
 import facade.{AuthFacade, SessionFacade}
-import model.error.AuthError
+import model.error.ApiError
 import model.{SecretToken, SessionId}
 import utils.ZIOFutures._
 import zio.ZIO
@@ -20,7 +20,7 @@ class AuthController(authFacade: AuthFacade, sessionFacade: SessionFacade)
       onSuccess(authFacade.register(authUser).unsafeToFuture) {
         case Right(_) => complete(StatusCodes.OK)
 
-        case Left(err: AuthError.UserAlreadyExist.type) => complete(StatusCodes.Conflict, err.message)
+        case Left(err: ApiError.UserAlreadyExist.type) => complete(StatusCodes.Conflict, err.message)
         case _ => complete(StatusCodes.InternalServerError)
       }
     }

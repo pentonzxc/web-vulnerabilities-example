@@ -9,7 +9,6 @@ case class AppConfig(
     liquibaseConfig: LiquibaseConfig
 )
 
-
 object AppConfig {
   def make() : Try[AppConfig] = Try {
     val appConfig = ConfigFactory.load(ConfigFactory.defaultApplication())
@@ -28,7 +27,6 @@ object AppConfig {
       user = postgresConfig.getString("user"),
       password = postgresConfig.getString("password")
     )
-
 
     AppConfig(postgres, liquibase)
   }

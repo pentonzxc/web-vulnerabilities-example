@@ -1,7 +1,6 @@
 package repository
 
-import model.SessionId
-import model.auth.Session
+import model.{Session, SessionId}
 import zio.{Task, ZIO}
 
 import scala.collection.concurrent.TrieMap

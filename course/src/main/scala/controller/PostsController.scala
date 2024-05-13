@@ -1,8 +1,6 @@
 package controller
 
 import akka.http.scaladsl.model.HttpHeader.ParsingResult
-import akka.http.scaladsl.model.headers.CacheDirectives.{`max-age`, `must-revalidate`, `no-cache`, `no-store`}
-import akka.http.scaladsl.model.headers.`Cache-Control`
 import akka.http.scaladsl.model.{HttpHeader, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
@@ -11,24 +9,14 @@ import dto.post._
 import facade.{PostsFacade, SessionFacade}
 import io.circe.Encoder._
 import io.circe.syntax._
-import model.error.InvalidUserException
-import model.{Login, PostId, SessionId}
+import model.error.{ApiError, InvalidUserException}
 import utils.ZIOFutures._
 
 class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, authDirectives: AuthDirectives)
   extends Controller {
 
-  private val withSessionCookie: Directive1[SessionId] = optionalCookie("session")
-    .flatMap {
-      case Some(c) => provide(SessionId(c.value))
-      case None => complete(StatusCodes.BadRequest, "invalid_session")
-    }
-  private val LoginMatcher = Segment.map(Login(_))
-  private val PostIdMatcher = JavaUUID.map(PostId(_))
-
-  private val NoCacheHeader = `Cache-Control`(`no-cache`, `must-revalidate`, `no-store`, `max-age`(0))
-  private val ContentTypeSecurityPolicyHeader =
-//    HttpHeader.parse("Content-Security-Policy", "script-src 'unsafe-inline' 'nonce-rAnd0m'; default-src 'self'") match {
+  private val cspHeader =
+//    HttpHeader.parse("Content-Security-Policy", "script-src 'nonce-rAnd0m'; default-src 'self'") match {
     HttpHeader.parse("Content-Security-Policy", "script-src 'unsafe-inline'; default-src 'self'") match {
       case ParsingResult.Ok(header, _) => header
       case ParsingResult.Error(_) => throw new RuntimeException("Can't parse `Content-Security-Policy` header")
@@ -37,12 +25,12 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, au
   private val createPost =
     path("posts" / LoginMatcher) { login =>
       post {
-        (withSessionCookie & headerValueByType[`X-CSRF-TOKEN`]()) { case (session, csrfToken) =>
-          authDirectives.checkSessionDirective(session, csrfToken.token, login, invalidateSessionCookie = true) {
+        (provideSessionCookie & provideCsrfToken) { case (session, csrfToken) =>
+          authDirectives.checkSessionDirective(session, csrfToken, login, invalidateSessionCookie = true) {
             entity(as[CreatePostRequest]) { createPostRequest =>
               val postDto = PostDto(content = createPostRequest.content, login = login)
               onSuccess(postsFacade.create(postDto).unsafeToFuture) {
-                respondWithHeader(csrfToken) {
+                respondWithHeader(`X-CSRF-TOKEN`(csrfToken)) {
                   complete(StatusCodes.Created)
                 }
               }
@@ -55,7 +43,7 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, au
   private val getPostsPage =
     path("posts" / LoginMatcher) { _ =>
       (get & acceptMediaTypes(MediaTypes.`text/html`)) { _ =>
-        respondWithHeaders(NoCacheHeader, ContentTypeSecurityPolicyHeader) {
+        respondWithHeaders(NoCacheHeader, cspHeader) {
           getFromResource("static/posts.html")
         }
       }
@@ -64,21 +52,19 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, au
   private val getPosts =
     path("posts" / LoginMatcher) { login =>
       (get & acceptMediaTypes(MediaTypes.`application/json`)) { _ =>
-        respondWithHeaders(NoCacheHeader, ContentTypeSecurityPolicyHeader) {
           onSuccess(postsFacade.findByLogin(login).unsafeToFuture) { posts =>
             complete(posts.asJson)
           }
         }
-      }
     }
 
   private val deletePost =
-    path("posts" / LoginMatcher / PostIdMatcher) { case (login , postId) =>
+    path("posts" / LoginMatcher / PostIdMatcher) { case (login, postId) =>
       delete {
-        (withSessionCookie & headerValueByType[`X-CSRF-TOKEN`]()) { case (sessionCookie, csrfToken) =>
-          authDirectives.checkSessionDirective(sessionCookie, csrfToken.token, login, invalidateSessionCookie = true) {
+        (provideSessionCookie & provideCsrfToken) { case (sessionCookie, csrfToken) =>
+          authDirectives.checkSessionDirective(sessionCookie, csrfToken, login, invalidateSessionCookie = true) {
             onSuccess(postsFacade.delete(postId).unsafeToFuture) {
-              respondWithHeader(csrfToken) {
+              respondWithHeader(`X-CSRF-TOKEN`(csrfToken)) {
                 complete(StatusCodes.NoContent)
               }
             }
@@ -89,12 +75,14 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, au
 
   override def route: Route =
     handleInvalidUserException {
-      concat(
-        getPostsPage,
-        getPosts,
-        createPost,
-        deletePost
-      )
+      handleAbsentAuthenticationFacts {
+        concat(
+          getPostsPage,
+          getPosts,
+          createPost,
+          deletePost
+        )
+      }
     }
 
   private def handleInvalidUserException =
@@ -102,5 +90,13 @@ class PostsController(postsFacade: PostsFacade, sessionFacade: SessionFacade, au
       ExceptionHandler {
         case _: InvalidUserException => complete(StatusCodes.BadRequest, "invalid_user")
       }
+    }
+
+  private def handleAbsentAuthenticationFacts =
+    handleRejections {
+      RejectionHandler.newBuilder().handle {
+        case MissingCookieRejection("session") => complete(StatusCodes.BadRequest, ApiError.InvalidSession.message)
+        case MissingHeaderRejection("X-CSRF-TOKEN") => complete(StatusCodes.BadRequest, ApiError.InvalidCsrf.message)
+      }.result()
     }
 }

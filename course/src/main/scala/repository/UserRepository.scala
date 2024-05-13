@@ -5,7 +5,7 @@ import doobie.Read
 import doobie.free.ConnectionIO
 import doobie.implicits._
 import doobie.util.transactor.Transactor
-import model.error.UserAlreadyExist
+import model.error.UserAlreadyExistException
 import model.{Login, User, UserId}
 import zio.Task
 import zio.interop.catz._
@@ -16,8 +16,6 @@ trait UserRepository {
   def createIfNotExists(user: User): Task[Unit]
 }
 
-
-// TODO: add logging on transactor
 class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with QueryImplicits {
   override def find(userId: UserId): Task[Option[User]] =
     findQuery(userId).transact(tx)
@@ -43,7 +41,7 @@ class PostgresUserRepository(tx: Transactor[Task]) extends UserRepository with Q
     val transaction = for {
       userOpt <- findByLoginQuery(user.login)
       _ <- userOpt match {
-        case Some(_) => Sync[ConnectionIO].raiseError(new UserAlreadyExist)
+        case Some(_) => Sync[ConnectionIO].raiseError(new UserAlreadyExistException)
         case None => createUser.map(_ => ())
       }
     } yield ()

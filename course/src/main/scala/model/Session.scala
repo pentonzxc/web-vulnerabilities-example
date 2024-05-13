@@ -1,6 +1,4 @@
-package model.auth
-
-import model.{SecretToken, SessionId, UserId}
+package model
 
 import java.time.Instant
 

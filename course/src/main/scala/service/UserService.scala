@@ -1,7 +1,7 @@
 package service
 
 import dto.AuthUser
-import model.error.AuthError
+import model.error.ApiError
 import model.{Generator, Login, User, UserId}
 import repository.UserRepository
 import zio.Task
@@ -9,18 +9,18 @@ import zio.Task
 import java.util.UUID
 
 trait UserService {
-  def authenticate(login: Login, password: String): Task[Either[AuthError, UserId]]
+  def authenticate(login: Login, password: String): Task[Either[ApiError, UserId]]
   def findUserByLogin(login: Login): Task[Option[User]]
   def create(authUser: AuthUser): Task[Unit]
 }
 
 class UserServiceImpl(userRepository: UserRepository) extends UserService {
 
-  override def authenticate(login: Login, password: String): Task[Either[AuthError, UserId]] =
+  override def authenticate(login: Login, password: String): Task[Either[ApiError, UserId]] =
     userRepository.findByLogin(login).map { userOpt =>
       for {
-        user <- userOpt.toRight(AuthError.InvalidUser)
-        _ <- Either.cond(user.password == password, (), AuthError.InvalidPassword)
+        user <- userOpt.toRight(ApiError.InvalidUser)
+        _ <- Either.cond(user.password == password, (), ApiError.InvalidPassword)
       } yield user.id
     }
 

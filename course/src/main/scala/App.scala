@@ -1,24 +1,23 @@
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import com.typesafe.scalalogging.StrictLogging
 import doobie.Transactor
-import modules.{AppConfig, PostgresConfig, Repositories, Controllers, Services}
+import modules._
 import org.postgresql.ds.PGSimpleDataSource
 import zio.{RIO, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Success
 
-object App extends ZIOAppDefault {
+object App extends ZIOAppDefault with StrictLogging {
 
   override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = {
     implicit val actorSystem: ActorSystem[_] = ActorSystem(Behaviors.empty, "app")
-    implicit val actorEx = actorSystem.executionContext
+    implicit val actorEx: ExecutionContextExecutor = actorSystem.executionContext
 
     val dependencies = for {
       appConfig <- ZIO.fromTry(AppConfig.make())
@@ -43,7 +42,6 @@ object App extends ZIOAppDefault {
         ZIO.succeed(actorSystem.terminate())
     }
 
-
     for {
       _ <- dependencies
       _ <- onShutdownCloseActorSystem
@@ -61,7 +59,7 @@ object App extends ZIOAppDefault {
     PostgresClient.create(pg)
   }
 
-  def initHttpServer(route : Route)(implicit
+  def initHttpServer(route: Route)(implicit
       system: ActorSystem[_],
       executionContext: ExecutionContext): Future[Http.ServerBinding] = {
     val onShutdownCloseRequestTimeout = FiniteDuration(5, TimeUnit.SECONDS)
@@ -69,7 +67,7 @@ object App extends ZIOAppDefault {
     Http().newServerAt("localhost", 8080).bind(route)
       .map(_.addToCoordinatedShutdown(onShutdownCloseRequestTimeout))
       .andThen {
-        case Success(value) => println(s"Server is started on ${value.localAddress.getPort}")
+        case Success(value) => logger.info(s"Server is started on ${value.localAddress.getPort}")
       }
   }
 }

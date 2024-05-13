@@ -1,8 +1,7 @@
 package facade
 
-import model.auth.Session
-import model.error.{AuthError, InvalidUserException}
-import model.{Login, SecretToken, SessionId, UserId}
+import model.error.{ApiError, InvalidUserException}
+import model.{Login, SecretToken, Session, SessionId, UserId}
 import service.{SessionService, UserService}
 import zio.{Task, ZIO}
 
@@ -14,7 +13,7 @@ trait SessionFacade {
       sessionId: SessionId,
       secretToken: SecretToken,
       maybeSessionOwner: Login,
-      time: Instant = Instant.now()): Task[Either[AuthError, Session]]
+      time: Instant = Instant.now()): Task[Either[ApiError, Session]]
   def issueSession(secretToken : SecretToken, userId: UserId, ttl: FiniteDuration) : Task[Session]
   def invalidateSession(sessionId: SessionId): Task[Unit]
 }
@@ -25,37 +24,37 @@ class SessionFacadeImpl(sessionService: SessionService, userService: UserService
       sessionId: SessionId,
       secretToken: SecretToken,
       maybeSessionOwner: Login,
-      time: Instant = Instant.now()): Task[Either[AuthError, Session]] = {
+      time: Instant = Instant.now()): Task[Either[ApiError, Session]] = {
     for {
       ownerOpt <- userService.findUserByLogin(maybeSessionOwner)
       sessionOpt <- sessionService.findSession(sessionId)
 
       result = for {
-        session <- sessionOpt.toRight(AuthError.InvalidSession)
+        session <- sessionOpt.toRight(ApiError.InvalidSession)
+        owner <- ownerOpt.toRight(ApiError.InvalidUser)
         _ <- checkExpired(session, time)
-        owner = ownerOpt.getOrElse(throw new InvalidUserException)
         _ <- checkStolen(session, owner.id)
         _ <- checkSecret(session, secretToken)
       } yield session
 
       _ <- ZIO.whenCase(result) {
-        case Left(AuthError.StolenSession) => invalidateSession(sessionId)
+        case Left(ApiError.StolenSession) => invalidateSession(sessionId)
       }
     } yield result
   }
+
+  override def issueSession(secretToken: SecretToken, userId: UserId, ttl: FiniteDuration): Task[Session] =
+    sessionService.issueSession(userId, secretToken, createdAt = Instant.now(), ttl = ttl)
 
   override def invalidateSession(sessionId: SessionId): Task[Unit] =
     sessionService.invalidateSession(sessionId)
 
   private def checkExpired(session: Session, now: Instant) =
-    Either.cond(session.exp.isAfter(now), (), AuthError.ExpiredSession)
+    Either.cond(session.exp.isAfter(now), (), ApiError.ExpiredSession)
 
   private def checkStolen(session: Session, maybeIss: UserId) =
-    Either.cond(session.iss == maybeIss, (), AuthError.StolenSession)
+    Either.cond(session.iss == maybeIss, (), ApiError.StolenSession)
 
   private def checkSecret(session : Session, secret : SecretToken) =
-    Either.cond(session.secretToken == secret, (), AuthError.InvalidCsrf)
-
-  override def issueSession(secretToken : SecretToken, userId: UserId, ttl: FiniteDuration): Task[Session] =
-    sessionService.issueSession(userId, secretToken, createdAt = Instant.now(), ttl = ttl)
+    Either.cond(session.secretToken == secret, (), ApiError.InvalidCsrf)
 }

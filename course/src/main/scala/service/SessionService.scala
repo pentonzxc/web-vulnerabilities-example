@@ -1,7 +1,6 @@
 package service
 
-import model.auth.Session
-import model.{Generator, SecretToken, SessionId, UserId}
+import model.{Generator, SecretToken, Session, SessionId, UserId}
 import repository.SessionRepository
 import zio.Task
 
